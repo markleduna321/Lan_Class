@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AsuraTECH LAN Classroom — Smart Classroom Platform</title>
+  <style>
+    /* ── Reset & base ───────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --brand:      #1E3A8A;
+      --brand-mid:  #2563EB;
+      --brand-sky:  #0EA5E9;
+      --accent:     #F59E0B;
+      --dark:       #0F172A;
+      --text:       #334155;
+      --muted:      #64748B;
+      --surface:    #F8FAFC;
+      --card:       #FFFFFF;
+      --border:     #E2E8F0;
+      --radius:     16px;
+      --shadow:     0 4px 24px rgba(30,58,138,.10);
+      --shadow-lg:  0 12px 40px rgba(30,58,138,.16);
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+      background: var(--surface);
+      line-height: 1.6;
+    }
+    a { color: var(--brand-mid); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    img { max-width: 100%; }
+
+    /* ── Utilities ──────────────────────────────────────────────────── */
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+    @media (max-width: 700px) { .grid-4 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .grid-4 { grid-template-columns: 1fr; } }
+
+    .tag {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+    .tag-brand { background: rgba(30,58,138,.1); color: var(--brand); }
+    .tag-amber { background: rgba(245,158,11,.12); color: #B45309; }
+    .tag-green { background: rgba(22,163,74,.1); color: #15803D; }
+    .tag-sky   { background: rgba(14,165,233,.1); color: #0369A1; }
+
+    /* ── Nav ────────────────────────────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 800; font-size: 17px; color: var(--brand);
+    }
+    .nav-logo span {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--brand) 0%, var(--brand-sky) 100%);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 20px;
+    }
+    .nav-links { display: flex; gap: 32px; }
+    .nav-links a { font-size: 14px; font-weight: 500; color: var(--text); }
+    .nav-links a:hover { color: var(--brand); text-decoration: none; }
+    .nav-cta {
+      background: var(--brand); color: #fff !important;
+      padding: 8px 20px; border-radius: 10px; font-weight: 600;
+      font-size: 14px; transition: background .2s;
+    }
+    .nav-cta:hover { background: var(--brand-mid) !important; text-decoration: none !important; }
+    @media (max-width: 680px) { .nav-links { display: none; } }
+
+    /* ── Hero ───────────────────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, var(--brand) 0%, var(--brand-mid) 50%, var(--brand-sky) 100%);
+      color: #fff; padding: 96px 0 80px;
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Ccircle cx='30' cy='30' r='20'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      pointer-events: none;
+    }
+    .hero-eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.7); margin-bottom: 16px; }
+    .hero h1 { font-size: clamp(36px, 5vw, 60px); font-weight: 900; line-height: 1.1; letter-spacing: -1.5px; margin-bottom: 20px; }
+    .hero h1 em { font-style: normal; color: var(--accent); }
+    .hero p { font-size: 18px; color: rgba(255,255,255,.8); max-width: 600px; margin: 0 auto 40px; line-height: 1.7; }
+    .hero-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 12px; font-weight: 700; font-size: 15px;
+      transition: transform .15s, box-shadow .15s; cursor: pointer; border: none;
+    }
+    .btn:hover { transform: translateY(-2px); text-decoration: none; }
+    .btn-white { background: #fff; color: var(--brand); box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+    .btn-white:hover { box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+    .btn-outline { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.5); }
+    .btn-outline:hover { border-color: #fff; background: rgba(255,255,255,.08); }
+    .hero-badges { display: flex; gap: 12px; justify-content: center; margin-top: 48px; flex-wrap: wrap; }
+    .badge {
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.2);
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 12px; color: rgba(255,255,255,.85); font-weight: 500;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .badge-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ADE80; flex-shrink: 0; }
+
+    /* ── Stats bar ──────────────────────────────────────────────────── */
+    .stats-bar { background: var(--card); border-bottom: 1px solid var(--border); padding: 24px 0; }
+    .stats-grid { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 16px; }
+    .stat { text-align: center; }
+    .stat-value { font-size: 28px; font-weight: 900; color: var(--brand); line-height: 1; }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; font-weight: 500; }
+
+    /* ── Section layout ─────────────────────────────────────────────── */
+    section { padding: 80px 0; }
+    section:nth-child(odd) { background: var(--card); }
+    .section-header { text-align: center; margin-bottom: 56px; }
+    .section-header h2 { font-size: clamp(28px, 3.5vw, 40px); font-weight: 800; color: var(--dark); letter-spacing: -.5px; margin-top: 12px; line-height: 1.2; }
+    .section-header p { font-size: 17px; color: var(--muted); max-width: 560px; margin: 12px auto 0; line-height: 1.7; }
+
+    /* ── Feature cards ──────────────────────────────────────────────── */
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: box-shadow .2s, transform .2s;
+    }
+    .feature-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-4px); }
+    section:nth-child(odd) .feature-card { background: var(--surface); }
+    .feature-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; margin-bottom: 16px;
+    }
+    .fi-blue   { background: rgba(30,58,138,.1); }
+    .fi-amber  { background: rgba(245,158,11,.12); }
+    .fi-green  { background: rgba(22,163,74,.1); }
+    .fi-sky    { background: rgba(14,165,233,.1); }
+    .fi-purple { background: rgba(139,92,246,.1); }
+    .fi-red    { background: rgba(239,68,68,.1); }
+    .feature-card h3 { font-size: 17px; font-weight: 700; color: var(--dark); margin-bottom: 8px; }
+    .feature-card p  { font-size: 14px; color: var(--muted); line-height: 1.65; }
+
+    /* ── How it works ───────────────────────────────────────────────── */
+    .step { display: flex; gap: 20px; align-items: flex-start; }
+    .step-num {
+      width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--brand), var(--brand-mid));
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 16px;
+      box-shadow: 0 4px 12px rgba(30,58,138,.3);
+    }
+    .step-content h3 { font-weight: 700; font-size: 16px; color: var(--dark); margin-bottom: 4px; }
+    .step-content p  { font-size: 14px; color: var(--muted); line-height: 1.6; }
+    .steps-list { display: flex; flex-direction: column; gap: 28px; }
+
+    /* ── Role cards ─────────────────────────────────────────────────── */
+    .role-card {
+      border-radius: var(--radius);
+      padding: 36px;
+      border: 2px solid transparent;
+    }
+    .role-teacher { background: linear-gradient(135deg, rgba(30,58,138,.06) 0%, rgba(37,99,235,.06) 100%); border-color: rgba(30,58,138,.15); }
+    .role-student { background: linear-gradient(135deg, rgba(14,165,233,.06) 0%, rgba(22,163,74,.06) 100%); border-color: rgba(14,165,233,.18); }
+    .role-icon { font-size: 40px; margin-bottom: 16px; }
+    .role-card h3 { font-size: 22px; font-weight: 800; color: var(--dark); margin-bottom: 8px; }
+    .role-card .role-sub { font-size: 14px; color: var(--muted); margin-bottom: 20px; }
+    .role-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .role-list li { display: flex; gap: 10px; font-size: 14px; color: var(--text); }
+    .role-list li::before { content: '✓'; color: #16A34A; font-weight: 700; flex-shrink: 0; }
+
+    /* ── Tech pills ─────────────────────────────────────────────────── */
+    .tech-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .tech-pill {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 18px; border-radius: 20px;
+      background: var(--card); border: 1px solid var(--border);
+      font-size: 13px; font-weight: 600; color: var(--text);
+      box-shadow: 0 2px 8px rgba(0,0,0,.05);
+      transition: box-shadow .2s;
+    }
+    .tech-pill:hover { box-shadow: var(--shadow); }
+
+    /* ── CTA ────────────────────────────────────────────────────────── */
+    .cta-section {
+      background: linear-gradient(135deg, var(--brand) 0%, var(--brand-mid) 100%);
+      padding: 80px 0; text-align: center; color: #fff;
+    }
+    .cta-section h2 { font-size: clamp(28px, 4vw, 44px); font-weight: 900; letter-spacing: -.5px; margin-bottom: 16px; }
+    .cta-section p { font-size: 17px; color: rgba(255,255,255,.8); max-width: 480px; margin: 0 auto 36px; }
+
+    /* ── Footer ─────────────────────────────────────────────────────── */
+    footer {
+      background: var(--dark); color: rgba(255,255,255,.6);
+      padding: 40px 0; text-align: center; font-size: 13px;
+    }
+    footer strong { color: rgba(255,255,255,.9); }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation ─────────────────────────────────────────────────────── -->
+<nav>
+  <div class="container nav-inner">
+    <div class="nav-logo">
+      <span>🎓</span>
+      AsuraTECH Classroom
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#roles">For Teachers &amp; Students</a>
+      <a href="#tech">Technology</a>
+      <a href="#download" class="nav-cta">Download App</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ───────────────────────────────────────────────────────────── -->
+<section class="hero" id="home">
+  <div class="container">
+    <div class="hero-eyebrow">AsuraTECH Solutions</div>
+    <h1>The <em>Smart Classroom</em><br>That Works Anywhere</h1>
+    <p>
+      A complete classroom platform for local networks and the cloud —
+      real-time quizzes, live presentations, materials management,
+      and a built-in community forum.
+    </p>
+    <div class="hero-buttons">
+      <a href="#download" class="btn btn-white">
+        <span>📱</span> Download for Android
+      </a>
+      <a href="#features" class="btn btn-outline">
+        <span>▶</span> See Features
+      </a>
+    </div>
+    <div class="hero-badges">
+      <div class="badge"><span class="badge-dot"></span> Works on Local LAN</div>
+      <div class="badge"><span class="badge-dot"></span> Cloud Sync</div>
+      <div class="badge"><span class="badge-dot"></span> No Internet Required for Basics</div>
+      <div class="badge"><span class="badge-dot"></span> Flutter · Android</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Stats bar ──────────────────────────────────────────────────────── -->
+<div class="stats-bar">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="stat-value">2-in-1</div>
+        <div class="stat-label">LAN + Cloud Platform</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">0 ms</div>
+        <div class="stat-label">LAN Latency (local)</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">∞</div>
+        <div class="stat-label">Students per Room</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">3</div>
+        <div class="stat-label">Post Categories</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">100%</div>
+        <div class="stat-label">Offline-First Local Mode</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Core Features ──────────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="section-header">
+      <span class="tag tag-brand">Core Features</span>
+      <h2>Everything a Classroom Needs</h2>
+      <p>From real-time quizzes to cloud-synced materials — AsuraTECH Classroom has the full toolkit for modern teaching.</p>
+    </div>
+
+    <div class="grid-3">
+
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">📡</div>
+        <h3>LAN Classroom Server</h3>
+        <p>The teacher's device acts as a local server. Students join over Wi-Fi with zero internet required. Perfect for schools with unreliable connectivity.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-sky">☁️</div>
+        <h3>Online Cloud Sessions</h3>
+        <p>Publish classrooms to the cloud server. Students anywhere can browse public rooms or join private rooms by Room ID. Sessions run over HTTPS.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-amber">⚡</div>
+        <h3>Live Quiz Engine</h3>
+        <p>Teachers push quizzes in real-time to all connected students. Multiple-choice questions, time limits, and instant results. Works on both LAN and online.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-green">📂</div>
+        <h3>Materials Library</h3>
+        <p>Upload PDFs, images, and documents. Students view PDFs in-app with the Syncfusion viewer. Files are available even without an active session.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">🎞️</div>
+        <h3>Live Presentation Mode</h3>
+        <p>Teachers present files to all students simultaneously. Students automatically see the current slide. All progress is synced in real-time.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-purple">✋</div>
+        <h3>Hand Raise &amp; Q&amp;A</h3>
+        <p>Students raise hands digitally. Teachers see the queue and call on specific students. Everyone in the session sees who has been called on.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-sky">💬</div>
+        <h3>Session Chat</h3>
+        <p>Real-time chat panel inside every live session. Students and teachers exchange messages without leaving the classroom view.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-amber">🔒</div>
+        <h3>Public &amp; Private Rooms</h3>
+        <p>Teachers choose visibility when publishing. Public rooms appear in the student browser. Private rooms are hidden and require a Room ID to join.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-green">🏆</div>
+        <h3>Community Forum</h3>
+        <p>A built-in Q&amp;A + discussion forum with Questions, Polls, and Showcases. Upvote/downvote system, code snippets, links, and a per-user reputation score.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Detailed Capabilities ──────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-header">
+      <span class="tag tag-green">Deep Dive</span>
+      <h2>Capabilities in Detail</h2>
+      <p>Every feature built to solve a real classroom problem.</p>
+    </div>
+
+    <div class="grid-2">
+
+      <!-- LAN Mode -->
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">📡</div>
+        <h3>LAN Network Mode</h3>
+        <p>
+          <strong>Teacher creates a local server</strong> on their device — no external infrastructure needed.
+          Students discover the room by entering the teacher's IP address or scanning a QR code.
+          The LAN server handles real-time WebSocket connections for quiz delivery, presentation sync,
+          and attendance tracking — all with millisecond response times on the local network.
+        </p>
+        <br>
+        <ul style="font-size:13px;color:var(--muted);padding-left:18px;line-height:2">
+          <li>Room discovery by IP or saved rooms list</li>
+          <li>Real-time WebSocket event delivery</li>
+          <li>Attendance auto-tracking (connect/disconnect)</li>
+          <li>Works without internet — only Wi-Fi needed</li>
+        </ul>
+      </div>
+
+      <!-- Online Mode -->
+      <div class="feature-card">
+        <div class="feature-icon fi-sky">☁️</div>
+        <h3>Online Cloud Mode</h3>
+        <p>
+          <strong>Teachers publish classrooms</strong> to the Laravel backend. Students browse published
+          rooms or join private rooms via Room ID. Live sessions are managed via REST polling —
+          students check for active quizzes and presentations every 6 seconds. Materials are always
+          accessible, even when no session is running.
+        </p>
+        <br>
+        <ul style="font-size:13px;color:var(--muted);padding-left:18px;line-height:2">
+          <li>Public / private room visibility control</li>
+          <li>Materials accessible 24/7 without active session</li>
+          <li>Polling-based event delivery (no WebSocket required)</li>
+          <li>Quiz results saved locally for review anytime</li>
+        </ul>
+      </div>
+
+      <!-- Quiz engine -->
+      <div class="feature-card">
+        <div class="feature-icon fi-amber">⚡</div>
+        <h3>Quiz Engine</h3>
+        <p>
+          Teachers create quiz templates with multiple questions and reuse them across sessions.
+          When a quiz is broadcast, students receive it in real-time and submit answers individually.
+          Results are stored both locally and on the server, and teachers can view per-student scores.
+        </p>
+        <br>
+        <ul style="font-size:13px;color:var(--muted);padding-left:18px;line-height:2">
+          <li>Multiple-choice question builder</li>
+          <li>Per-session quiz assignment</li>
+          <li>Real-time result collection</li>
+          <li>Results persist locally — students can review anytime</li>
+        </ul>
+      </div>
+
+      <!-- Forum -->
+      <div class="feature-card">
+        <div class="feature-icon fi-green">🏆</div>
+        <h3>Community Forum</h3>
+        <p>
+          A full-featured discussion board built into the app. Users post Questions, run Polls,
+          or Showcase their work. Each post supports rich text, a code snippet block (monospace
+          dark editor), and a URL link. Voting awards Aura reputation points to authors.
+        </p>
+        <br>
+        <ul style="font-size:13px;color:var(--muted);padding-left:18px;line-height:2">
+          <li>3 post types: Question, Poll, Showcase</li>
+          <li>Code snippet editor with syntax highlighting block</li>
+          <li>URL attachment (no images — text-first approach)</li>
+          <li>Upvote/downvote on posts and responses</li>
+          <li>Aura reputation score per user</li>
+          <li>Poll voting with live percentage display</li>
+        </ul>
+      </div>
+
+      <!-- Profile & Auth -->
+      <div class="feature-card">
+        <div class="feature-icon fi-purple">👤</div>
+        <h3>User Accounts &amp; Sync</h3>
+        <p>
+          Local accounts (offline-first) and online cloud accounts are separate but linked.
+          Users register locally and optionally link to the cloud server. Credentials are stored
+          securely using Flutter Secure Storage. On app restart, the last session is automatically
+          restored.
+        </p>
+        <br>
+        <ul style="font-size:13px;color:var(--muted);padding-left:18px;line-height:2">
+          <li>Local offline-first account system</li>
+          <li>Optional cloud account linking (Sanctum bearer tokens)</li>
+          <li>Auto-login on app restart</li>
+          <li>Separate Instructor / Student roles</li>
+        </ul>
+      </div>
+
+      <!-- AI & Academy -->
+      <div class="feature-card">
+        <div class="feature-icon fi-red">🤖</div>
+        <h3>Course Academy &amp; AI Settings</h3>
+        <p>
+          A built-in offline course timeline lets students track their learning progress with
+          gamified badges. The AI Settings panel lets users configure AI-powered features
+          (study assistant, quiz generation hints). No external AI key required for base functionality.
+        </p>
+        <br>
+        <ul style="font-size:13px;color:var(--muted);padding-left:18px;line-height:2">
+          <li>Offline course timeline with progress tracking</li>
+          <li>Gamified achievement badges</li>
+          <li>AI settings for optional AI-assisted features</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── How It Works ───────────────────────────────────────────────────── -->
+<section id="how-it-works">
+  <div class="container">
+    <div class="section-header">
+      <span class="tag tag-sky">Workflow</span>
+      <h2>How It Works</h2>
+      <p>From zero to live classroom in under a minute.</p>
+    </div>
+
+    <div class="grid-2">
+
+      <div>
+        <h3 style="font-size:18px;font-weight:800;color:var(--brand);margin-bottom:24px">🎓 Teacher Flow</h3>
+        <div class="steps-list">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h3>Create &amp; Set Up Classroom</h3>
+              <p>Open the app as Instructor. Create a classroom, add materials (PDF, images, docs), and build quiz templates in the Quiz Library.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h3>Start a Session</h3>
+              <p><strong>LAN:</strong> Tap "Initialize Local Network" — your device becomes the server. Share your IP with students.<br>
+              <strong>Online:</strong> Publish the classroom to cloud, then tap "Start Online Session."</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h3>Present &amp; Engage</h3>
+              <p>Push file presentations to all students, launch live quizzes, monitor hand raises, and chat — all from the teacher dashboard.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h3>Review Results</h3>
+              <p>After the quiz, view per-student scores and participation data. Students keep their results locally for self-review.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-size:18px;font-weight:800;color:#0369A1;margin-bottom:24px">📚 Student Flow</h3>
+        <div class="steps-list">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h3>Register &amp; Join</h3>
+              <p>Register as a Student. Enter the teacher's IP for LAN sessions, or browse published classrooms in the Online tab. Use a Room ID to join private rooms.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h3>Browse Materials Anytime</h3>
+              <p>Materials (PDFs, images, documents) are always accessible regardless of whether the teacher has an active session running.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h3>Participate Live</h3>
+              <p>When the teacher starts a session, tap "Join Live" to enter the live lobby. Answer quizzes, raise your hand, and chat with the class.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h3>Engage in the Community</h3>
+              <p>Post questions, share code snippets, vote on answers, and earn Aura reputation points in the Community Forum.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Roles ──────────────────────────────────────────────────────────── -->
+<section id="roles">
+  <div class="container">
+    <div class="section-header">
+      <span class="tag tag-amber">Two Roles</span>
+      <h2>Built for Teachers &amp; Students</h2>
+      <p>Two distinct role experiences, one unified app.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="role-card role-teacher">
+        <div class="role-icon">🎓</div>
+        <h3>Instructor</h3>
+        <p class="role-sub">Control the classroom experience from a single dashboard.</p>
+        <ul class="role-list">
+          <li>Create and manage multiple classrooms</li>
+          <li>Upload course materials (PDF, images, docs)</li>
+          <li>Start LAN server or cloud online session</li>
+          <li>Live-present files to all connected students</li>
+          <li>Launch and broadcast quizzes in real-time</li>
+          <li>View quiz results and attendance data</li>
+          <li>Manage hand-raise queue and call on students</li>
+          <li>Publish classrooms as Public or Private (Room ID access)</li>
+          <li>Build and reuse quiz template library</li>
+          <li>Chat with all session participants</li>
+        </ul>
+      </div>
+
+      <div class="role-card role-student">
+        <div class="role-icon">📚</div>
+        <h3>Student</h3>
+        <p class="role-sub">Learn, participate, and stay engaged anywhere.</p>
+        <ul class="role-list">
+          <li>Join local classrooms via LAN (teacher IP)</li>
+          <li>Browse published online classrooms</li>
+          <li>Join private rooms with a Room ID</li>
+          <li>View course materials anytime (no session needed)</li>
+          <li>Participate in live quizzes and see results</li>
+          <li>Follow live file presentations in real-time</li>
+          <li>Raise hand digitally and wait to be called</li>
+          <li>Chat inside sessions</li>
+          <li>Review past quiz results offline</li>
+          <li>Post, respond, and vote in the Community Forum</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Technology ─────────────────────────────────────────────────────── -->
+<section id="tech">
+  <div class="container">
+    <div class="section-header">
+      <span class="tag tag-sky">Built With</span>
+      <h2>Modern, Reliable Technology</h2>
+      <p>Production-grade stack designed for classrooms from 5 to 500 students.</p>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:40px">
+      <div class="feature-card" style="text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">🐦</div>
+        <h3>Flutter</h3>
+        <p>Cross-platform UI with Material 3 design system. Edge-to-edge display, smooth animations.</p>
+      </div>
+      <div class="feature-card" style="text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">🐘</div>
+        <h3>Laravel</h3>
+        <p>PHP backend with Sanctum authentication, Eloquent ORM, and RESTful API design.</p>
+      </div>
+      <div class="feature-card" style="text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">🗄️</div>
+        <h3>SQLite</h3>
+        <p>Offline-first local database via sqflite. Full functionality without internet — sync when connected.</p>
+      </div>
+      <div class="feature-card" style="text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">🔐</div>
+        <h3>Secure Storage</h3>
+        <p>Flutter Secure Storage for tokens and credentials. No plain-text secrets on device.</p>
+      </div>
+    </div>
+
+    <div class="tech-grid">
+      <div class="tech-pill">🌐 HTTP REST API</div>
+      <div class="tech-pill">🔒 Laravel Sanctum (Bearer tokens)</div>
+      <div class="tech-pill">📄 Syncfusion PDF Viewer</div>
+      <div class="tech-pill">🗃️ sqflite v2.4</div>
+      <div class="tech-pill">📡 LAN WebSocket server (Dart isolate)</div>
+      <div class="tech-pill">📱 Flutter Material 3</div>
+      <div class="tech-pill">🔑 Flutter Secure Storage</div>
+      <div class="tech-pill">📦 File Picker</div>
+      <div class="tech-pill">🎥 Jitsi Meet SDK (video-ready)</div>
+      <div class="tech-pill">🔔 Web Socket Channel</div>
+      <div class="tech-pill">🎲 UUID v4</div>
+      <div class="tech-pill">🛰️ Android minSdk 26</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ────────────────────────────────────────────────────────────── -->
+<section class="cta-section" id="download">
+  <div class="container">
+    <h2>Ready to Transform Your Classroom?</h2>
+    <p>Download the Android APK and run your first live session in minutes — no setup required for LAN mode.</p>
+    <div class="hero-buttons">
+      <a href="#" class="btn btn-white">
+        📱 Download APK (Android)
+      </a>
+      <a href="https://itcomm.asuratechsolutions.com" class="btn btn-outline" target="_blank">
+        ☁️ Cloud Server
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <p>
+      © 2026 <strong>AsuraTECH Solutions</strong> · AsuraTECH LAN Classroom ·
+      Built with <strong>Flutter</strong> + <strong>Laravel</strong>
+    </p>
+    <p style="margin-top:8px">
+      Backend: <a href="https://itcomm.asuratechsolutions.com" style="color:rgba(255,255,255,.5)">itcomm.asuratechsolutions.com</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
