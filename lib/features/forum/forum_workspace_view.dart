@@ -52,10 +52,12 @@ class _ForumWorkspaceViewState extends State<ForumWorkspaceView>
   @override
   void initState() {
     super.initState();
-    _loadUserThenPosts();
+    // Posts load immediately — identity/aura resolve in the background.
+    _fetchPosts();
+    _loadIdentity();
   }
 
-  Future<void> _loadUserThenPosts() async {
+  Future<void> _loadIdentity() async {
     const s = FlutterSecureStorage();
     final activeUser = await AsuraRepository.getActiveUser();
     _myName = (activeUser?['name'] as String?)?.trim().isNotEmpty == true
@@ -63,6 +65,7 @@ class _ForumWorkspaceViewState extends State<ForumWorkspaceView>
         : await s.read(key: 'ACTIVE_USER_NAME') ?? 'User';
     _myNickname = (activeUser?['nickname'] as String?)?.trim() ?? '';
     _myId   = await s.read(key: 'ONLINE_USER_ID')   ?? _myName;
+    if (mounted) setState(() {});
 
     final profile = await CloudApiService.getCurrentProfile();
     if (profile != null) {
@@ -75,16 +78,17 @@ class _ForumWorkspaceViewState extends State<ForumWorkspaceView>
         _myNickname = profileNickname;
       }
     }
-    _loadReputation();
-    _fetchPosts();
+    await _loadReputation(profile: profile);
+    if (mounted) setState(() {});
   }
 
-  Future<void> _loadReputation() async {
+  Future<void> _loadReputation({Map<String, dynamic>? profile}) async {
     int? aura;
 
-    // Source of truth: user profile aura fields.
-    final profile = await CloudApiService.getCurrentProfile();
-    aura = extractReputationFromApiPayload(profile);
+    // Source of truth: user profile aura fields. Reuse the caller's profile
+    // when available so this doesn't issue a duplicate request.
+    final effectiveProfile = profile ?? await CloudApiService.getCurrentProfile();
+    aura = extractReputationFromApiPayload(effectiveProfile);
 
     // Fallback: forum endpoint if profile aura is unavailable.
     if (aura == null) {
@@ -105,14 +109,21 @@ class _ForumWorkspaceViewState extends State<ForumWorkspaceView>
   Future<void> _fetchPosts({bool silent = false}) async {
     if (!silent && mounted) setState(() { _loading = true; _hasError = false; });
     final q = _selectedCategory == 'all' ? '' : '?category=$_selectedCategory';
-    final r = await CloudApiService.get('/api/forum/posts$q');
+    var r = await CloudApiService.get('/api/forum/posts$q');
+    // One retry — transient drops are common on mobile data.
+    r ??= await CloudApiService.get('/api/forum/posts$q');
     if (!mounted) return;
     if (r == null || r.statusCode != 200) {
+      final code = r?.statusCode;
       setState(() {
         _loading = false;
         if (!silent) {
           _hasError = true;
-          _errorMsg = r == null ? 'Could not reach the server.' : 'Server error (${r.statusCode}).';
+          _errorMsg = r == null
+              ? 'Could not reach the server. Check your connection.'
+              : (code == 401 || code == 419)
+                  ? 'Your session has expired. Sign out and sign in again to reconnect.'
+                  : 'Server error ($code). Try again in a moment.';
         }
       });
       return;
@@ -120,7 +131,11 @@ class _ForumWorkspaceViewState extends State<ForumWorkspaceView>
     try {
       final decoded = jsonDecode(r.body);
       final raw = decoded is List ? decoded : (decoded['data'] as List? ?? []);
-      setState(() { _posts = raw.cast<Map<String, dynamic>>(); _loading = false; });
+      setState(() {
+        _posts = raw.cast<Map<String, dynamic>>();
+        _loading = false;
+        _hasError = false;
+      });
     } catch (_) {
       setState(() { _loading = false; if (!silent) _hasError = true; _errorMsg = 'Unexpected response.'; });
     }

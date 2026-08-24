@@ -16,6 +16,7 @@ import '../academy/course_timeline_view.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../main.dart';
 import '../../services/cloud_api_service.dart';
+import '../../services/classroom_sync_events.dart';
 import '../../database/asura_repository.dart';
 import '../settings/ai_settings_view.dart';
 import '../quiz/quiz_template_list_view.dart';
@@ -60,13 +61,13 @@ class _MainAppShellState extends State<MainAppShell> {
       debugPrint('[Classroom Sync] Starting sync for user: $_userName');
       
       // Get current user info to determine role and filter classrooms by owner
-      int? currentUserId;
+      String? currentUserId;
       String? accountRole;
       try {
         final userResponse = await CloudApiService.get('/api/user');
         if (userResponse != null && userResponse.statusCode == 200) {
           final userData = jsonDecode(userResponse.body);
-          currentUserId = userData['id'] as int?;
+          currentUserId = userData['id']?.toString();
           accountRole = userData['role'] as String?;
           debugPrint('[Classroom Sync] User ID: $currentUserId, account role: $accountRole');
         }
@@ -94,8 +95,9 @@ class _MainAppShellState extends State<MainAppShell> {
       // Filter classrooms: if user is teacher, only sync their own rooms (owner_id matches)
       List<Map<String, dynamic>> myClassrooms = classrooms;
       if (accountRole == 'teacher' && currentUserId != null) {
+        // String-compare — the backend serializes ids as int or string depending on route.
         myClassrooms = classrooms
-            .where((c) => (c['owner_id'] as int?) == currentUserId)
+            .where((c) => c['owner_id']?.toString() == currentUserId)
             .toList();
         debugPrint('[Classroom Sync] Filtered to ${myClassrooms.length} classrooms owned by teacher (user $currentUserId)');
       } else if (accountRole == 'student') {
@@ -184,6 +186,7 @@ class _MainAppShellState extends State<MainAppShell> {
       
       // Also sync to local classroom database
       await _syncPublishedClassroomsToDb(myClassrooms);
+      notifyClassroomSyncCompleted();
     } catch (e) {
       debugPrint('[Classroom Sync] ERROR: $e');
     }
@@ -386,14 +389,21 @@ class _MainAppShellState extends State<MainAppShell> {
             : '$remoteMaterialId$extension';
         final localPath = p.join(materialsDir.path, localFilename);
 
-        final downloaded = await _downloadRemoteMaterial(
-          remoteUrl: remoteUrl,
-          resolvedBaseUrl: baseUrl,
-          destinationPath: localPath,
-        );
-        if (!downloaded) {
-          debugPrint('[Material Sync] Failed to download $originalName');
-          continue;
+        // Skip the download when the file already exists with the expected size.
+        final localFile = File(localPath);
+        final alreadyDownloaded = await localFile.exists() &&
+            (sizeBytes == 0 || await localFile.length() == sizeBytes);
+
+        if (!alreadyDownloaded) {
+          final downloaded = await _downloadRemoteMaterial(
+            remoteUrl: remoteUrl,
+            resolvedBaseUrl: baseUrl,
+            destinationPath: localPath,
+          );
+          if (!downloaded) {
+            debugPrint('[Material Sync] Failed to download $originalName');
+            continue;
+          }
         }
 
         if (existing == null) {
@@ -436,19 +446,26 @@ class _MainAppShellState extends State<MainAppShell> {
     required String resolvedBaseUrl,
     required String destinationPath,
   }) async {
-    try {
-      final uri = Uri.parse(
-        remoteUrl.startsWith('http') ? remoteUrl : '$resolvedBaseUrl$remoteUrl',
-      );
-      final response = await http.get(uri);
-      if (response.statusCode != 200) {
-        return false;
+    final uri = Uri.parse(
+      remoteUrl.startsWith('http') ? remoteUrl : '$resolvedBaseUrl$remoteUrl',
+    );
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: CloudApiService.kToken);
+    // Two attempts — large files on mobile data drop often enough to matter.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final response = await http.get(uri, headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        }).timeout(const Duration(minutes: 2));
+        if (response.statusCode != 200) continue;
+        await File(destinationPath)
+            .writeAsBytes(response.bodyBytes, flush: true);
+        return true;
+      } catch (_) {
+        // Retry once, then give up.
       }
-      await File(destinationPath).writeAsBytes(response.bodyBytes, flush: true);
-      return true;
-    } catch (_) {
-      return false;
     }
+    return false;
   }
 
   int _asInt(dynamic value) {

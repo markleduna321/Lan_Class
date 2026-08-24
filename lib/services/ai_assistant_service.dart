@@ -361,7 +361,39 @@ class AiAssistantService {
     final meaningfulOptions = options.where(_isMeaningfulText).toList();
     if (meaningfulOptions.length < 2) return false;
 
+    // Normalise in place so the UI's equality check always matches an option.
+    question['correctAnswer'] = resolveCorrectOption(correctAnswer, options);
     return true;
+  }
+
+  /// Maps an AI-provided answer ("B", "b)", padded/case-variant text) to the
+  /// exact option string, so answer marking is reliable.
+  static String resolveCorrectOption(String rawAnswer, List<String> options) {
+    final answer = rawAnswer.trim();
+    if (options.isEmpty) return answer;
+
+    for (final option in options) {
+      if (option == answer) return option;
+    }
+    final lowerAnswer = answer.toLowerCase();
+    for (final option in options) {
+      if (option.toLowerCase() == lowerAnswer) return option;
+    }
+
+    // Letter answers: A/B/C/D possibly followed by ')' '.' or ':'.
+    final letterMatch = RegExp(r'^([a-dA-D])[).:\s]*$').firstMatch(answer);
+    if (letterMatch != null) {
+      final index = letterMatch.group(1)!.toLowerCase().codeUnitAt(0) - 'a'.codeUnitAt(0);
+      if (index >= 0 && index < options.length) return options[index];
+    }
+
+    for (final option in options) {
+      if (option.toLowerCase().contains(lowerAnswer) ||
+          lowerAnswer.contains(option.toLowerCase())) {
+        return option;
+      }
+    }
+    return options.first;
   }
 
   static bool _isMeaningfulText(String value) {
@@ -986,7 +1018,7 @@ Map<String, dynamic> buildAssistantPayloadImpl({
   String? context,
   String? supplementalContext,
 }) {
-  final normalizedHistory = conversationHistory
+  final filteredHistory = conversationHistory
       .where((entry) {
         final role = entry['role']?.toString().toLowerCase();
         return role == 'user' || role == 'assistant';
@@ -999,8 +1031,11 @@ Map<String, dynamic> buildAssistantPayloadImpl({
           'content': content,
         };
       })
-      .take(12)
       .toList();
+  // Keep the most recent turns — old ones matter least to the reply.
+  final normalizedHistory = filteredHistory.length > 12
+      ? filteredHistory.sublist(filteredHistory.length - 12)
+      : filteredHistory;
 
   final normalizedMaterials = materials
       .where((material) {

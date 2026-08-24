@@ -56,8 +56,11 @@ class _ForumPostDetailViewState extends State<ForumPostDetailView> {
   }
 
   Future<void> _loadDetail() async {
-    final r = await CloudApiService.get('/api/forum/posts/${widget.postId}');
-    if (!mounted || r == null || r.statusCode != 200) {
+    var r = await CloudApiService.get('/api/forum/posts/${widget.postId}');
+    // One retry — transient drops are common on mobile data.
+    r ??= await CloudApiService.get('/api/forum/posts/${widget.postId}');
+    if (!mounted) return;
+    if (r == null || r.statusCode != 200) {
       setState(() => _loadingResponses = false);
       return;
     }

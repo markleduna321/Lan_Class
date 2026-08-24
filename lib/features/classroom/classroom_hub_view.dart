@@ -8,6 +8,7 @@ import 'materials_library_view.dart';
 import 'attendance_log_view.dart';
 import '../quiz/room_quiz_list_view.dart';
 import '../../services/cloud_sync_service.dart';
+import '../../services/classroom_sync_events.dart';
 
 class ClassroomHubView extends StatefulWidget {
   const ClassroomHubView({super.key});
@@ -27,6 +28,14 @@ class _ClassroomHubViewState extends State<ClassroomHubView> {
   void initState() {
     super.initState();
     _refreshRooms();
+    // Refresh when the background login sync lands rooms on a new device.
+    classroomSyncCompleted.addListener(_refreshRooms);
+  }
+
+  @override
+  void dispose() {
+    classroomSyncCompleted.removeListener(_refreshRooms);
+    super.dispose();
   }
 
   Future<void> _refreshRooms() async {

@@ -97,20 +97,27 @@ class _AiAssistantViewState extends State<AiAssistantView> {
     for (final classroom in classrooms) {
       final classroomId = classroom['id']?.toString();
       if (classroomId == null || classroomId.isEmpty) continue;
-      
+      // The backend resolves ids against ITS database — on synced devices the
+      // local UUIDs differ from the server ids, so prefer remote ids.
+      final classroomRemoteId =
+          classroom['remote_id']?.toString().isNotEmpty == true
+              ? classroom['remote_id'].toString()
+              : classroomId;
+
       final classroomMaterials = await AsuraRepository.getMaterialsForClassroom(classroomId);
       for (final material in classroomMaterials) {
-        final materialId = material['id']?.toString();
+        final localMaterialId = material['id']?.toString() ?? '';
+        final remoteMaterialId = material['remote_id']?.toString() ?? '';
         final materialSource = material['remote_url']?.toString() ??
             material['file_url']?.toString() ??
             material['url']?.toString() ??
             material['file_path']?.toString() ?? '';
         materials.add({
-          'classroom_id': classroomId,
+          'classroom_id': classroomRemoteId,
           'classroom_name': classroom['name']?.toString() ?? 'Classroom',
           'original_name': material['original_name']?.toString() ?? 'Material',
           'mime_type': material['mime_type']?.toString() ?? 'application/octet-stream',
-          'material_id': materialId ?? '',
+          'material_id': remoteMaterialId.isNotEmpty ? remoteMaterialId : localMaterialId,
           'storage_path': material['file_path']?.toString() ?? material['storage_path']?.toString() ?? '',
           'download_url': materialSource,
         });
@@ -120,15 +127,19 @@ class _AiAssistantViewState extends State<AiAssistantView> {
     for (final room in savedRooms) {
       final hostIp = room['ip']?.toString() ?? '';
       if (hostIp.isEmpty) continue;
+      // Prefer the published room's server id so the backend can resolve it.
+      final roomRemoteId = room['remoteId']?.toString().isNotEmpty == true
+          ? room['remoteId'].toString()
+          : (room['classroomId']?.toString().isNotEmpty == true
+              ? room['classroomId'].toString()
+              : hostIp);
 
       final studentMaterialRows = await AsuraRepository.getStudentMaterials(hostIp);
       for (final studentMaterial in studentMaterialRows) {
         final studentMaterialId = studentMaterial['id']?.toString();
         final localPath = studentMaterial['local_path']?.toString() ?? '';
         studentMaterials.add({
-          'classroom_id': room['classroomId']?.toString().isNotEmpty == true
-              ? room['classroomId']?.toString()
-              : hostIp,
+          'classroom_id': roomRemoteId,
           'classroom_name': room['roomName']?.toString().isNotEmpty == true
               ? room['roomName']?.toString()
               : 'Classroom',
@@ -143,6 +154,9 @@ class _AiAssistantViewState extends State<AiAssistantView> {
 
     // Debug log for troubleshooting
     debugPrint('[AI Helper] Loaded ${materials.length} classroom materials + ${studentMaterials.length} student materials');
+    for (final m in materials.take(5)) {
+      debugPrint('[AI Helper] material "${m['original_name']}" — classroom_id=${m['classroom_id']}, material_id=${m['material_id']}');
+    }
 
     final expectingQuizResponse = _awaitingQuizResponse;
     final reply = await AiAssistantService.sendMessage(
@@ -210,8 +224,12 @@ class _AiAssistantViewState extends State<AiAssistantView> {
         _score = 0;
         _answers.clear();
         _showTopicPicker = false;
+        final reason = replyText.length > 140
+            ? '${replyText.substring(0, 140)}…'
+            : replyText;
         _messages.add(_ChatMessage(
-          text: 'I started a local practice quiz with ${_quizQuestions.length} questions on $_pendingQuizTopic. This uses my built-in question bank.',
+          text: 'The AI reply could not be used ($reason). '
+              'I started a local practice quiz with ${_quizQuestions.length} questions on $_pendingQuizTopic instead.',
           isUser: false,
         ));
       } else {
@@ -807,17 +825,52 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                         ...((_quizQuestions[_quizIndex]['options'] as List?) ?? []).map((option) {
                           final optionText = option.toString();
                           final isSelected = _selectedOption == optionText;
+                          final correctAnswer =
+                              _quizQuestions[_quizIndex]['correctAnswer']?.toString() ?? '';
+                          final isCorrectOption = optionText == correctAnswer;
+
+                          // After reveal: correct option green, wrong selection red.
+                          Color? background;
+                          Color border = Colors.grey.shade400;
+                          if (_showAnswer && isCorrectOption) {
+                            background = const Color(0xFFDCFCE7);
+                            border = const Color(0xFF16A34A);
+                          } else if (_showAnswer && isSelected && !isCorrectOption) {
+                            background = const Color(0xFFFEE2E2);
+                            border = const Color(0xFFDC2626);
+                          } else if (isSelected) {
+                            background = const Color(0xFFDBEAFE);
+                            border = const Color(0xFF2563EB);
+                          }
+
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
-                                backgroundColor: isSelected ? const Color(0xFFDBEAFE) : null,
-                                side: BorderSide(color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade400),
+                                backgroundColor: background,
+                                disabledBackgroundColor: background,
+                                side: BorderSide(color: border),
                               ),
                               onPressed: _showAnswer ? null : () => _selectOption(optionText),
                               child: Align(
                                 alignment: Alignment.centerLeft,
-                                child: Text(optionText),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(optionText,
+                                          style: TextStyle(
+                                              color: _showAnswer
+                                                  ? Colors.black87
+                                                  : null)),
+                                    ),
+                                    if (_showAnswer && isCorrectOption)
+                                      const Icon(Icons.check_circle,
+                                          size: 18, color: Color(0xFF16A34A)),
+                                    if (_showAnswer && isSelected && !isCorrectOption)
+                                      const Icon(Icons.cancel,
+                                          size: 18, color: Color(0xFFDC2626)),
+                                  ],
+                                ),
                               ),
                             ),
                           );
@@ -829,26 +882,56 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 if (_showAnswer)
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFECFDF3),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Correct answer: ${_quizQuestions[_quizIndex]['correctAnswer']?.toString() ?? ''}',
-                                          style: const TextStyle(fontWeight: FontWeight.w700),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(_quizQuestions[_quizIndex]['hint']?.toString() ?? ''),
-                                        const SizedBox(height: 4),
-                                        Text(_quizQuestions[_quizIndex]['explanation']?.toString() ?? ''),
-                                      ],
-                                    ),
-                                  ),
+                                  Builder(builder: (context) {
+                                    final correct = _selectedOption ==
+                                        (_quizQuestions[_quizIndex]['correctAnswer']?.toString() ?? '');
+                                    return Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: correct
+                                            ? const Color(0xFFECFDF3)
+                                            : const Color(0xFFFEF2F2),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                            color: correct
+                                                ? const Color(0xFF86EFAC)
+                                                : const Color(0xFFFECACA)),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                  correct
+                                                      ? Icons.check_circle
+                                                      : Icons.cancel,
+                                                  size: 16,
+                                                  color: correct
+                                                      ? const Color(0xFF16A34A)
+                                                      : const Color(0xFFDC2626)),
+                                              const SizedBox(width: 6),
+                                              Text(correct ? 'Correct!' : 'Incorrect',
+                                                  style: TextStyle(
+                                                      fontWeight: FontWeight.w700,
+                                                      color: correct
+                                                          ? const Color(0xFF166534)
+                                                          : const Color(0xFF991B1B))),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'Correct answer: ${_quizQuestions[_quizIndex]['correctAnswer']?.toString() ?? ''}',
+                                            style: const TextStyle(fontWeight: FontWeight.w700),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(_quizQuestions[_quizIndex]['hint']?.toString() ?? ''),
+                                          const SizedBox(height: 4),
+                                          Text(_quizQuestions[_quizIndex]['explanation']?.toString() ?? ''),
+                                        ],
+                                      ),
+                                    );
+                                  }),
                                 const SizedBox(height: 8),
                                 Row(
                                   children: [
