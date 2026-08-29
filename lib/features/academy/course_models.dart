@@ -422,12 +422,28 @@ class ActivitySubmission {
     required this.feedback,
   });
 
-  factory ActivitySubmission.fromJson(Map<String, dynamic> json) =>
-      ActivitySubmission(
-        activityId: _asString(json['activity_id']),
-        passed: _asBool(json['passed']),
-        feedback: _asString(json['feedback']),
-      );
+  factory ActivitySubmission.fromJson(Map<String, dynamic> json) {
+    var feedback = _asString(json['feedback']);
+    // Derive feedback from the per-item results array the server returns.
+    final results = json['results'];
+    if (feedback.isEmpty && results is List) {
+      final lines = <String>[];
+      for (var i = 0; i < results.length; i++) {
+        final r = results[i];
+        if (r is Map && r['passed'] != true) {
+          final hint = (r['hint'] ?? r['explanation'])?.toString() ?? '';
+          lines.add(
+              'Item ${i + 1} is incorrect${hint.isEmpty ? '' : ' — hint: $hint'}');
+        }
+      }
+      feedback = lines.join('\n');
+    }
+    return ActivitySubmission(
+      activityId: _asString(json['activity_id']),
+      passed: _asBool(json['passed']),
+      feedback: feedback,
+    );
+  }
 }
 
 class Certificate {

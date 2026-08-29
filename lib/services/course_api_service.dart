@@ -109,6 +109,10 @@ class CourseApiService {
   static ActivitySubmission? _parseSubmission(String body) {
     try {
       final decoded = jsonDecode(body);
+      // POST /submit responds {passed, results, attempts} at the top level.
+      if (decoded is Map && decoded.containsKey('passed')) {
+        return ActivitySubmission.fromJson(Map<String, dynamic>.from(decoded));
+      }
       if (decoded is Map && decoded['submission'] == null) return null;
       final map = unwrapObject(decoded, keys: ['submission']);
       return map == null ? null : ActivitySubmission.fromJson(map);

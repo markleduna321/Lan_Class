@@ -79,16 +79,21 @@ class _ActivityPlayerViewState extends State<ActivityPlayerView> {
     switch (activity.type) {
       case 'fill_blank':
         return {
-          'answers': _blankControllers.map((c) => c.text.trim()).toList(),
+          'submitted_answers':
+              _blankControllers.map((c) => c.text.trim()).toList(),
         };
       case 'code_write':
-        return {'code': _codeController.text};
+        // Server trusts the client-verified result (same as the web app).
+        return {'submitted_code': _codeController.text, 'passed': true};
       case 'quiz':
+        // Server expects option index (multiple_choice) or bool (true_false).
         return {
-          'answers': List.generate(
-            activity.questions.length,
-            (i) => _quizAnswers[i] ?? '',
-          ),
+          'submitted_answers': List.generate(activity.questions.length, (i) {
+            final question = activity.questions[i];
+            final choice = _quizAnswers[i] ?? '';
+            if (question.type == 'true_false') return choice == 'true';
+            return question.options.indexOf(choice);
+          }),
         };
       default:
         return const {};
@@ -258,7 +263,36 @@ class _ActivityPlayerViewState extends State<ActivityPlayerView> {
   }
 
   List<Widget> _buildFillBlank(CourseActivity activity) {
-    return List.generate(activity.blanksCount, (i) {
+    final widgets = <Widget>[];
+
+    // The question body lives in starter_code with ___ marking each blank.
+    if (activity.starterCode.trim().isNotEmpty) {
+      var blankNumber = 0;
+      final display = activity.starterCode.replaceAllMapped(
+        RegExp(r'_{3,}'),
+        (_) => '⟦${++blankNumber}⟧',
+      );
+      widgets.add(Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          display,
+          style: const TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            height: 1.6,
+            color: Color(0xFFE2E8F0),
+          ),
+        ),
+      ));
+    }
+
+    widgets.addAll(List.generate(activity.blanksCount, (i) {
       final hint = i < activity.blanksHints.length ? activity.blanksHints[i] : null;
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
@@ -267,14 +301,15 @@ class _ActivityPlayerViewState extends State<ActivityPlayerView> {
           enabled: !_passed,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            labelText: 'Blank ${i + 1}',
+            labelText: 'Blank ⟦${i + 1}⟧',
             hintText: hint,
             helperText: hint == null ? null : 'Hint: $hint',
             border: const OutlineInputBorder(),
           ),
         ),
       );
-    });
+    }));
+    return widgets;
   }
 
   List<Widget> _buildCodeWrite(CourseActivity activity) {

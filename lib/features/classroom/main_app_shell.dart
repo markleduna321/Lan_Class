@@ -34,7 +34,7 @@ class MainAppShell extends StatefulWidget {
 
 class _MainAppShellState extends State<MainAppShell> {
   int _currentIndex = 0;
-  String _userName  = '';
+  String _userName = '';
 
   @override
   void initState() {
@@ -46,7 +46,7 @@ class _MainAppShellState extends State<MainAppShell> {
     const storage = FlutterSecureStorage();
     _userName = (await storage.read(key: 'ACTIVE_USER_NAME')) ?? 'User';
     if (mounted) setState(() {});
-    
+
     // Sync classrooms from server (for new devices after login)
     // For students: syncs enrolled classrooms
     // For teachers: syncs published classrooms they own
@@ -57,9 +57,9 @@ class _MainAppShellState extends State<MainAppShell> {
     try {
       // Don't block the UI — run in background
       await Future.delayed(const Duration(milliseconds: 500));
-      
+
       debugPrint('[Classroom Sync] Starting sync for user: $_userName');
-      
+
       // Get current user info to determine role and filter classrooms by owner
       String? currentUserId;
       String? accountRole;
@@ -69,46 +69,59 @@ class _MainAppShellState extends State<MainAppShell> {
           final userData = jsonDecode(userResponse.body);
           currentUserId = userData['id']?.toString();
           accountRole = userData['role'] as String?;
-          debugPrint('[Classroom Sync] User ID: $currentUserId, account role: $accountRole');
+          debugPrint(
+            '[Classroom Sync] User ID: $currentUserId, account role: $accountRole',
+          );
         }
       } catch (e) {
         debugPrint('[Classroom Sync] Failed to get user info: $e');
       }
-      
+
       // Get classrooms from the backend
       final classrooms = await _fetchPublishedClassrooms();
-      debugPrint('[Classroom Sync] Fetched ${classrooms.length} total classrooms from server');
-      
+      debugPrint(
+        '[Classroom Sync] Fetched ${classrooms.length} total classrooms from server',
+      );
+
       if (classrooms.isEmpty) {
         debugPrint('[Classroom Sync] No classrooms found on server');
         return;
       }
-      
+
       // Log all classrooms with owner info for debugging
       for (int i = 0; i < classrooms.length; i++) {
         final classroom = classrooms[i];
         final ownerId = classroom['owner_id'];
         final name = classroom['name'] ?? classroom['title'] ?? 'Unknown';
-        debugPrint('[Classroom Sync] Classroom $i: "$name" - owner_id=$ownerId, visibility=${classroom['visibility']}, id=${classroom['id']}');
+        debugPrint(
+          '[Classroom Sync] Classroom $i: "$name" - owner_id=$ownerId, visibility=${classroom['visibility']}, id=${classroom['id']}',
+        );
       }
-      
-      // Filter classrooms: if user is teacher, only sync their own rooms (owner_id matches)
+
+      // Filter classrooms: teachers sync their own rooms. Student room lists
+      // are kept to explicit joins; public discovery must not grant access.
       List<Map<String, dynamic>> myClassrooms = classrooms;
       if (accountRole == 'teacher' && currentUserId != null) {
         // String-compare — the backend serializes ids as int or string depending on route.
         myClassrooms = classrooms
             .where((c) => c['owner_id']?.toString() == currentUserId)
             .toList();
-        debugPrint('[Classroom Sync] Filtered to ${myClassrooms.length} classrooms owned by teacher (user $currentUserId)');
+        debugPrint(
+          '[Classroom Sync] Filtered to ${myClassrooms.length} classrooms owned by teacher (user $currentUserId)',
+        );
       } else if (accountRole == 'student') {
-        debugPrint('[Classroom Sync] User is student - showing available public classrooms');
+        debugPrint(
+          '[Classroom Sync] User is student - public classrooms remain discovery-only',
+        );
       }
-      
+
       if (myClassrooms.isEmpty) {
-        debugPrint('[Classroom Sync] No classrooms match filter for role=$accountRole');
+        debugPrint(
+          '[Classroom Sync] No classrooms match filter for role=$accountRole',
+        );
         return;
       }
-      
+
       // Load existing saved rooms
       const storage = FlutterSecureStorage();
       final rawList = await storage.read(key: 'saved_classrooms_v2');
@@ -116,24 +129,47 @@ class _MainAppShellState extends State<MainAppShell> {
       if (rawList != null) {
         try {
           final decoded = jsonDecode(rawList) as List<dynamic>;
-          existingRooms.addAll(
-            decoded.cast<Map<String, dynamic>>()
-          );
+          existingRooms.addAll(decoded.cast<Map<String, dynamic>>());
         } catch (e) {
           debugPrint('[Classroom Sync] Error parsing saved rooms: $e');
         }
       }
-      debugPrint('[Classroom Sync] Found ${existingRooms.length} existing saved rooms');
-      
-      // For each classroom, add it if not already saved
+      debugPrint(
+        '[Classroom Sync] Found ${existingRooms.length} existing saved rooms',
+      );
+
+      if (accountRole == 'student') {
+        final joinedIds = <String>{};
+        for (final room in existingRooms) {
+          for (final key in ['classroomId', 'remoteId']) {
+            final id = room[key]?.toString().trim() ?? '';
+            if (id.isNotEmpty) joinedIds.add(id);
+          }
+        }
+        myClassrooms = myClassrooms.where((classroom) {
+          final localId = classroom['local_id']?.toString().trim() ?? '';
+          final remoteId = classroom['id']?.toString().trim() ?? '';
+          return joinedIds.contains(localId) || joinedIds.contains(remoteId);
+        }).toList();
+        debugPrint(
+          '[Classroom Sync] Student joined-room sync: ${myClassrooms.length} classrooms',
+        );
+      }
+
+      // Only teachers persist newly synced classrooms. Students must explicitly
+      // add/join a room from the classroom UI before it becomes an AI source.
       bool modified = false;
-      for (final classroom in myClassrooms) {
+      for (final classroom
+          in accountRole == 'student'
+              ? const <Map<String, dynamic>>[]
+              : myClassrooms) {
         final remoteId = classroom['id']?.toString();
-        final roomName = (classroom['name'] as String?) ?? 
-                        (classroom['title'] as String?) ?? 
-                        'Classroom';
+        final roomName =
+            (classroom['name'] as String?) ??
+            (classroom['title'] as String?) ??
+            'Classroom';
         final schedule = (classroom['schedule'] as String?) ?? '';
-        
+
         if (remoteId?.isNotEmpty == true) {
           final existingIndex = existingRooms.indexWhere((r) {
             if (r['remoteId'] == remoteId) return true;
@@ -144,7 +180,7 @@ class _MainAppShellState extends State<MainAppShell> {
           if (existingIndex == -1) {
             // Add this classroom to saved rooms
             final newRoom = {
-              'ip': '',  // No LAN IP for published classrooms
+              'ip': '', // No LAN IP for published classrooms
               'classroomId': '',
               'roomName': roomName,
               'schedule': schedule,
@@ -153,9 +189,13 @@ class _MainAppShellState extends State<MainAppShell> {
             };
             existingRooms.add(newRoom);
             modified = true;
-            debugPrint('[Classroom Sync] ✓ Added: "$roomName" (remoteId: $remoteId)');
+            debugPrint(
+              '[Classroom Sync] ✓ Added: "$roomName" (remoteId: $remoteId)',
+            );
           } else {
-            final existing = Map<String, dynamic>.from(existingRooms[existingIndex]);
+            final existing = Map<String, dynamic>.from(
+              existingRooms[existingIndex],
+            );
             final mergedRoom = {
               ...existing,
               'roomName': roomName,
@@ -165,25 +205,31 @@ class _MainAppShellState extends State<MainAppShell> {
             if (jsonEncode(existing) != jsonEncode(mergedRoom)) {
               existingRooms[existingIndex] = mergedRoom;
               modified = true;
-              debugPrint('[Classroom Sync] ↻ Updated saved room: "$roomName" (remoteId: $remoteId)');
+              debugPrint(
+                '[Classroom Sync] ↻ Updated saved room: "$roomName" (remoteId: $remoteId)',
+              );
             } else {
-              debugPrint('[Classroom Sync] ⊘ Already exists: "$roomName" (remoteId: $remoteId)');
+              debugPrint(
+                '[Classroom Sync] ⊘ Already exists: "$roomName" (remoteId: $remoteId)',
+              );
             }
           }
         }
       }
-      
+
       // Persist if we added new rooms
       if (modified) {
         await storage.write(
           key: 'saved_classrooms_v2',
           value: jsonEncode(existingRooms),
         );
-        debugPrint('[Classroom Sync] ✓ Persisted ${existingRooms.length} total rooms to secure storage');
+        debugPrint(
+          '[Classroom Sync] ✓ Persisted ${existingRooms.length} total rooms to secure storage',
+        );
       } else {
         debugPrint('[Classroom Sync] No new rooms to persist');
       }
-      
+
       // Also sync to local classroom database
       await _syncPublishedClassroomsToDb(myClassrooms);
       notifyClassroomSyncCompleted();
@@ -197,39 +243,55 @@ class _MainAppShellState extends State<MainAppShell> {
       // First, get current user info to filter by owner
       debugPrint('[Classroom Fetch] Getting current user info');
       final userResponse = await CloudApiService.get('/api/user');
-      
+
       if (userResponse == null || userResponse.statusCode != 200) {
-        debugPrint('[Classroom Fetch] Failed to get user info. Status: ${userResponse?.statusCode}');
+        debugPrint(
+          '[Classroom Fetch] Failed to get user info. Status: ${userResponse?.statusCode}',
+        );
       } else {
         final userData = jsonDecode(userResponse.body);
         final userId = userData['id'];
-        debugPrint('[Classroom Fetch] Current user ID: $userId, role: ${userData['role']}');
+        debugPrint(
+          '[Classroom Fetch] Current user ID: $userId, role: ${userData['role']}',
+        );
       }
-      
+
       // Try endpoint for user's own classrooms first
       debugPrint('[Classroom Fetch] Attempting /api/me/classrooms');
       var response = await CloudApiService.get('/api/me/classrooms');
-      
+
       if (response == null || response.statusCode != 200) {
-        debugPrint('[Classroom Fetch] /api/me/classrooms returned ${response?.statusCode} - falling back');
-        
+        debugPrint(
+          '[Classroom Fetch] /api/me/classrooms returned ${response?.statusCode} - falling back',
+        );
+
         // Fetch public and private separately and merge — backend filters by visibility by default
-        debugPrint('[Classroom Fetch] Fetching /api/classrooms (public + private separately)');
-        final publicResponse  = await CloudApiService.get('/api/classrooms?visibility=public');
-        final privateResponse = await CloudApiService.get('/api/classrooms?visibility=private');
-        
+        debugPrint(
+          '[Classroom Fetch] Fetching /api/classrooms (public + private separately)',
+        );
+        final publicResponse = await CloudApiService.get(
+          '/api/classrooms?visibility=public',
+        );
+        final privateResponse = await CloudApiService.get(
+          '/api/classrooms?visibility=private',
+        );
+
         final List<dynamic> merged = [];
-        
+
         if (publicResponse != null && publicResponse.statusCode == 200) {
           final decoded = jsonDecode(publicResponse.body);
-          final raw = decoded is List ? decoded : (decoded['data'] as List? ?? []);
+          final raw = decoded is List
+              ? decoded
+              : (decoded['data'] as List? ?? []);
           merged.addAll(raw);
           debugPrint('[Classroom Fetch] Public classrooms: ${raw.length}');
         }
-        
+
         if (privateResponse != null && privateResponse.statusCode == 200) {
           final decoded = jsonDecode(privateResponse.body);
-          final raw = decoded is List ? decoded : (decoded['data'] as List? ?? []);
+          final raw = decoded is List
+              ? decoded
+              : (decoded['data'] as List? ?? []);
           // Deduplicate by id
           for (final item in raw) {
             final id = item['id']?.toString();
@@ -239,19 +301,23 @@ class _MainAppShellState extends State<MainAppShell> {
           }
           debugPrint('[Classroom Fetch] Private classrooms: ${raw.length}');
         }
-        
+
         debugPrint('[Classroom Fetch] Total merged: ${merged.length}');
         return merged.cast<Map<String, dynamic>>();
       }
-      
+
       // /api/me/classrooms succeeded — parse it
-      debugPrint('[Classroom Fetch] Response received. Body length: ${response.body.length}');
+      debugPrint(
+        '[Classroom Fetch] Response received. Body length: ${response.body.length}',
+      );
       final decoded = jsonDecode(response.body);
-      final List<dynamic> raw = decoded is List 
-          ? decoded 
+      final List<dynamic> raw = decoded is List
+          ? decoded
           : (decoded['data'] as List? ?? []);
       final result = raw.cast<Map<String, dynamic>>();
-      debugPrint('[Classroom Fetch] Successfully parsed ${result.length} classrooms');
+      debugPrint(
+        '[Classroom Fetch] Successfully parsed ${result.length} classrooms',
+      );
       return result;
     } catch (e) {
       debugPrint('[Classroom Fetch] Exception: $e');
@@ -265,17 +331,20 @@ class _MainAppShellState extends State<MainAppShell> {
     List<Map<String, dynamic>> classrooms,
   ) async {
     try {
-      debugPrint('[DB Sync] Syncing ${classrooms.length} classrooms to local database');
-      
+      debugPrint(
+        '[DB Sync] Syncing ${classrooms.length} classrooms to local database',
+      );
+
       int addedCount = 0;
       int updatedCount = 0;
-      
+
       for (final classroom in classrooms) {
         final remoteId = classroom['id']?.toString();
         if (remoteId?.isNotEmpty != true) continue;
-        final roomName = (classroom['name'] as String?) ?? 
-                        (classroom['title'] as String?) ?? 
-                        'Classroom';
+        final roomName =
+            (classroom['name'] as String?) ??
+            (classroom['title'] as String?) ??
+            'Classroom';
         final schedule = (classroom['schedule'] as String?) ?? '';
         final visibility = (classroom['visibility'] as String?) ?? 'public';
         final studentCount = _asInt(classroom['student_count']);
@@ -325,8 +394,10 @@ class _MainAppShellState extends State<MainAppShell> {
           classroomRemoteId: remoteId,
         );
       }
-      
-      debugPrint('[DB Sync] Complete: $addedCount added, $updatedCount updated');
+
+      debugPrint(
+        '[DB Sync] Complete: $addedCount added, $updatedCount updated',
+      );
     } catch (e) {
       debugPrint('[DB Sync] ERROR: $e');
     }
@@ -341,7 +412,9 @@ class _MainAppShellState extends State<MainAppShell> {
         '/api/classrooms/$classroomRemoteId/materials',
       );
       if (response == null || response.statusCode != 200) {
-        debugPrint('[Material Sync] Skipped for remote classroom $classroomRemoteId: status ${response?.statusCode}');
+        debugPrint(
+          '[Material Sync] Skipped for remote classroom $classroomRemoteId: status ${response?.statusCode}',
+        );
         return;
       }
 
@@ -350,7 +423,9 @@ class _MainAppShellState extends State<MainAppShell> {
           ? decoded
           : (decoded['data'] as List? ?? []);
       if (raw.isEmpty) {
-        debugPrint('[Material Sync] No remote materials for classroom $classroomRemoteId');
+        debugPrint(
+          '[Material Sync] No remote materials for classroom $classroomRemoteId',
+        );
         return;
       }
 
@@ -367,15 +442,20 @@ class _MainAppShellState extends State<MainAppShell> {
         if (item is! Map<String, dynamic>) continue;
 
         final remoteMaterialId = item['id']?.toString();
-        final remoteUrl = item['file_url']?.toString() ?? item['url']?.toString() ?? '';
-        if (remoteMaterialId == null || remoteMaterialId.isEmpty || remoteUrl.isEmpty) {
+        final remoteUrl =
+            item['file_url']?.toString() ?? item['url']?.toString() ?? '';
+        if (remoteMaterialId == null ||
+            remoteMaterialId.isEmpty ||
+            remoteUrl.isEmpty) {
           continue;
         }
 
         final originalName = item['original_name']?.toString() ?? 'Material';
-        final mimeType = item['mime_type']?.toString() ?? 'application/octet-stream';
+        final mimeType =
+            item['mime_type']?.toString() ?? 'application/octet-stream';
         final sizeBytes = _asInt(item['size_bytes']);
-        final createdAt = item['created_at']?.toString() ?? DateTime.now().toIso8601String();
+        final createdAt =
+            item['created_at']?.toString() ?? DateTime.now().toIso8601String();
         final existing = await AsuraRepository.getMaterialByRemoteId(
           classroomLocalId,
           remoteMaterialId,
@@ -384,14 +464,16 @@ class _MainAppShellState extends State<MainAppShell> {
         final extension = p.extension(originalName).isNotEmpty
             ? p.extension(originalName)
             : p.extension(remoteUrl);
-        final localFilename = existing?['filename']?.toString().isNotEmpty == true
+        final localFilename =
+            existing?['filename']?.toString().isNotEmpty == true
             ? existing!['filename'].toString()
             : '$remoteMaterialId$extension';
         final localPath = p.join(materialsDir.path, localFilename);
 
         // Skip the download when the file already exists with the expected size.
         final localFile = File(localPath);
-        final alreadyDownloaded = await localFile.exists() &&
+        final alreadyDownloaded =
+            await localFile.exists() &&
             (sizeBytes == 0 || await localFile.length() == sizeBytes);
 
         if (!alreadyDownloaded) {
@@ -435,7 +517,9 @@ class _MainAppShellState extends State<MainAppShell> {
         syncedCount++;
       }
 
-      debugPrint('[Material Sync] Synced $syncedCount materials for classroom $classroomRemoteId');
+      debugPrint(
+        '[Material Sync] Synced $syncedCount materials for classroom $classroomRemoteId',
+      );
     } catch (e) {
       debugPrint('[Material Sync] ERROR for classroom $classroomRemoteId: $e');
     }
@@ -454,12 +538,16 @@ class _MainAppShellState extends State<MainAppShell> {
     // Two attempts — large files on mobile data drop often enough to matter.
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        final response = await http.get(uri, headers: {
-          if (token != null) 'Authorization': 'Bearer $token',
-        }).timeout(const Duration(minutes: 2));
+        final response = await http
+            .get(
+              uri,
+              headers: {if (token != null) 'Authorization': 'Bearer $token'},
+            )
+            .timeout(const Duration(minutes: 2));
         if (response.statusCode != 200) continue;
-        await File(destinationPath)
-            .writeAsBytes(response.bodyBytes, flush: true);
+        await File(
+          destinationPath,
+        ).writeAsBytes(response.bodyBytes, flush: true);
         return true;
       } catch (_) {
         // Retry once, then give up.
@@ -474,8 +562,6 @@ class _MainAppShellState extends State<MainAppShell> {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-
-
   Future<void> _signOut() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -484,8 +570,9 @@ class _MainAppShellState extends State<MainAppShell> {
         content: const Text('You will be returned to the login screen.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
@@ -529,7 +616,7 @@ class _MainAppShellState extends State<MainAppShell> {
         statusBarIconBrightness: Brightness.light,
         systemNavigationBarColor:
             Theme.of(context).navigationBarTheme.backgroundColor ??
-                Colors.white,
+            Colors.white,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
@@ -541,7 +628,9 @@ class _MainAppShellState extends State<MainAppShell> {
               Text(titles[_currentIndex]),
               if (_userName.isNotEmpty && _currentIndex == 0)
                 Text(
-                  isTeacher ? 'Instructor · $_userName' : 'Student · $_userName',
+                  isTeacher
+                      ? 'Instructor · $_userName'
+                      : 'Student · $_userName',
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w400,
@@ -556,13 +645,19 @@ class _MainAppShellState extends State<MainAppShell> {
               onSelected: (value) async {
                 switch (value) {
                   case 'quiz':
-                    Navigator.push(context,
-                        MaterialPageRoute(
-                            builder: (_) => const QuizTemplateListView()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const QuizTemplateListView(),
+                      ),
+                    );
                   case 'ai':
-                    Navigator.push(context,
-                        MaterialPageRoute(
-                            builder: (_) => AiSettingsView(isTeacher: isTeacher)));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AiSettingsView(isTeacher: isTeacher),
+                      ),
+                    );
                   case 'signout':
                     await _signOut();
                 }
@@ -592,8 +687,10 @@ class _MainAppShellState extends State<MainAppShell> {
                   value: 'signout',
                   child: ListTile(
                     leading: Icon(Icons.logout, color: Colors.red),
-                    title: Text('Sign Out',
-                        style: TextStyle(color: Colors.red)),
+                    title: Text(
+                      'Sign Out',
+                      style: TextStyle(color: Colors.red),
+                    ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -602,22 +699,17 @@ class _MainAppShellState extends State<MainAppShell> {
             ),
           ],
         ),
-        body: IndexedStack(
-          index: _currentIndex,
-          children: views,
-        ),
+        body: IndexedStack(index: _currentIndex, children: views),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (i) => setState(() => _currentIndex = i),
-          labelBehavior:
-              NavigationDestinationLabelBehavior.onlyShowSelected,
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
           destinations: [
             NavigationDestination(
-              icon: Icon(isTeacher
-                  ? Icons.school_outlined
-                  : Icons.meeting_room_outlined),
-              selectedIcon:
-                  Icon(isTeacher ? Icons.school : Icons.meeting_room),
+              icon: Icon(
+                isTeacher ? Icons.school_outlined : Icons.meeting_room_outlined,
+              ),
+              selectedIcon: Icon(isTeacher ? Icons.school : Icons.meeting_room),
               label: isTeacher ? 'Classroom' : 'Join',
             ),
             const NavigationDestination(

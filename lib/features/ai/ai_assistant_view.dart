@@ -46,10 +46,13 @@ class _AiAssistantViewState extends State<AiAssistantView> {
   @override
   void initState() {
     super.initState();
-    _messages.add(const _ChatMessage(
-      text: 'I can help you study from the materials available in your joined classrooms. Ask me about a topic, a lecture, or a document summary.',
-      isUser: false,
-    ));
+    _messages.add(
+      const _ChatMessage(
+        text:
+            'I can help you study from the materials available in your joined classrooms. Ask me about a topic, a lecture, or a document summary.',
+        isUser: false,
+      ),
+    );
     _loadConfiguration();
   }
 
@@ -77,14 +80,20 @@ class _AiAssistantViewState extends State<AiAssistantView> {
       _isLoading = true;
     });
 
-    final classrooms = await AsuraRepository.getAllClassrooms();
+    final allClassrooms = await AsuraRepository.getAllClassrooms();
     final savedRooms = await _loadSavedRooms();
+    final classrooms = await _classroomsAvailableToStudent(
+      allClassrooms,
+      savedRooms,
+    );
     if (classrooms.isEmpty) {
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No classrooms found. Please create or join a classroom first.'),
+          content: Text(
+            'No classrooms found. Please create or join a classroom first.',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -101,24 +110,34 @@ class _AiAssistantViewState extends State<AiAssistantView> {
       // local UUIDs differ from the server ids, so prefer remote ids.
       final classroomRemoteId =
           classroom['remote_id']?.toString().isNotEmpty == true
-              ? classroom['remote_id'].toString()
-              : classroomId;
+          ? classroom['remote_id'].toString()
+          : classroomId;
 
-      final classroomMaterials = await AsuraRepository.getMaterialsForClassroom(classroomId);
+      final classroomMaterials = await AsuraRepository.getMaterialsForClassroom(
+        classroomId,
+      );
       for (final material in classroomMaterials) {
         final localMaterialId = material['id']?.toString() ?? '';
         final remoteMaterialId = material['remote_id']?.toString() ?? '';
-        final materialSource = material['remote_url']?.toString() ??
+        final materialSource =
+            material['remote_url']?.toString() ??
             material['file_url']?.toString() ??
             material['url']?.toString() ??
-            material['file_path']?.toString() ?? '';
+            material['file_path']?.toString() ??
+            '';
         materials.add({
           'classroom_id': classroomRemoteId,
           'classroom_name': classroom['name']?.toString() ?? 'Classroom',
           'original_name': material['original_name']?.toString() ?? 'Material',
-          'mime_type': material['mime_type']?.toString() ?? 'application/octet-stream',
-          'material_id': remoteMaterialId.isNotEmpty ? remoteMaterialId : localMaterialId,
-          'storage_path': material['file_path']?.toString() ?? material['storage_path']?.toString() ?? '',
+          'mime_type':
+              material['mime_type']?.toString() ?? 'application/octet-stream',
+          'material_id': remoteMaterialId.isNotEmpty
+              ? remoteMaterialId
+              : localMaterialId,
+          'storage_path':
+              material['file_path']?.toString() ??
+              material['storage_path']?.toString() ??
+              '',
           'download_url': materialSource,
         });
       }
@@ -131,10 +150,12 @@ class _AiAssistantViewState extends State<AiAssistantView> {
       final roomRemoteId = room['remoteId']?.toString().isNotEmpty == true
           ? room['remoteId'].toString()
           : (room['classroomId']?.toString().isNotEmpty == true
-              ? room['classroomId'].toString()
-              : hostIp);
+                ? room['classroomId'].toString()
+                : hostIp);
 
-      final studentMaterialRows = await AsuraRepository.getStudentMaterials(hostIp);
+      final studentMaterialRows = await AsuraRepository.getStudentMaterials(
+        hostIp,
+      );
       for (final studentMaterial in studentMaterialRows) {
         final studentMaterialId = studentMaterial['id']?.toString();
         final localPath = studentMaterial['local_path']?.toString() ?? '';
@@ -143,8 +164,11 @@ class _AiAssistantViewState extends State<AiAssistantView> {
           'classroom_name': room['roomName']?.toString().isNotEmpty == true
               ? room['roomName']?.toString()
               : 'Classroom',
-          'original_name': studentMaterial['original_name']?.toString() ?? 'Material',
-          'mime_type': studentMaterial['mime_type']?.toString() ?? 'application/octet-stream',
+          'original_name':
+              studentMaterial['original_name']?.toString() ?? 'Material',
+          'mime_type':
+              studentMaterial['mime_type']?.toString() ??
+              'application/octet-stream',
           'material_id': studentMaterialId ?? '',
           'storage_path': localPath,
           'download_url': localPath,
@@ -153,9 +177,13 @@ class _AiAssistantViewState extends State<AiAssistantView> {
     }
 
     // Debug log for troubleshooting
-    debugPrint('[AI Helper] Loaded ${materials.length} classroom materials + ${studentMaterials.length} student materials');
+    debugPrint(
+      '[AI Helper] Loaded ${materials.length} classroom materials + ${studentMaterials.length} student materials',
+    );
     for (final m in materials.take(5)) {
-      debugPrint('[AI Helper] material "${m['original_name']}" — classroom_id=${m['classroom_id']}, material_id=${m['material_id']}');
+      debugPrint(
+        '[AI Helper] material "${m['original_name']}" — classroom_id=${m['classroom_id']}, material_id=${m['material_id']}',
+      );
     }
 
     final expectingQuizResponse = _awaitingQuizResponse;
@@ -167,20 +195,28 @@ class _AiAssistantViewState extends State<AiAssistantView> {
       allowWebSearch: _allowWebSearch,
       conversationHistory: _messages
           .where((message) => !message.isUser || message.text.isNotEmpty)
-          .map((message) => {
-                'role': message.isUser ? 'user' : 'assistant',
-                'content': message.text,
-              })
+          .map(
+            (message) => {
+              'role': message.isUser ? 'user' : 'assistant',
+              'content': message.text,
+            },
+          )
           .toList(),
     );
 
     if (!mounted) return;
-    final replyText = reply ?? 'I could not generate an answer. Please sign in and try again.';
-    final parsedQuiz = expectingQuizResponse ? AiAssistantService.parseQuizPayload(replyText) : const <Map<String, dynamic>>[];
+    final replyText =
+        reply ??
+        'I could not generate an answer. Please sign in and try again.';
+    final parsedQuiz = expectingQuizResponse
+        ? AiAssistantService.parseQuizPayload(replyText)
+        : const <Map<String, dynamic>>[];
 
     // Debug logging for quiz parsing
     if (expectingQuizResponse) {
-      debugPrint('[AI Helper] Quiz parsing: got ${parsedQuiz.length} questions from AI response');
+      debugPrint(
+        '[AI Helper] Quiz parsing: got ${parsedQuiz.length} questions from AI response',
+      );
     }
 
     setState(() {
@@ -203,15 +239,17 @@ class _AiAssistantViewState extends State<AiAssistantView> {
         _answers.clear();
         _showTopicPicker = false;
         final supplemented = completedQuiz.length > parsedQuiz.length;
-        _messages.add(_ChatMessage(
-          text: supplemented
-              ? 'Mock quiz is ready. The AI returned ${parsedQuiz.length} question(s), so I added local practice items to complete $_pendingQuizQuestionCount questions.'
-              : 'Mock quiz is ready. Choose an answer and tap Answer to reveal the hint, then continue to Next.',
-          isUser: false,
-        ));
+        _messages.add(
+          _ChatMessage(
+            text: supplemented
+                ? 'Mock quiz is ready. The AI returned ${parsedQuiz.length} question(s), so I added local practice items to complete $_pendingQuizQuestionCount questions.'
+                : 'Mock quiz is ready. Choose an answer and tap Answer to reveal the hint, then continue to Next.',
+            isUser: false,
+          ),
+        );
       } else if (expectingQuizResponse) {
         // Quiz was expected but parsing returned 0 questions
-        // Try local fallback quiz regardless of AI response  
+        // Try local fallback quiz regardless of AI response
         debugPrint('[AI Helper] Quiz parsing failed, using local fallback');
         _quizQuestions = AiAssistantService.buildLocalMockQuiz(
           topic: _pendingQuizTopic,
@@ -227,17 +265,17 @@ class _AiAssistantViewState extends State<AiAssistantView> {
         final reason = replyText.length > 140
             ? '${replyText.substring(0, 140)}…'
             : replyText;
-        _messages.add(_ChatMessage(
-          text: 'The AI reply could not be used ($reason). '
-              'I started a local practice quiz with ${_quizQuestions.length} questions on $_pendingQuizTopic instead.',
-          isUser: false,
-        ));
+        _messages.add(
+          _ChatMessage(
+            text:
+                'The AI reply could not be used ($reason). '
+                'I started a local practice quiz with ${_quizQuestions.length} questions on $_pendingQuizTopic instead.',
+            isUser: false,
+          ),
+        );
       } else {
         // Not a quiz request, just show the AI response
-        _messages.add(_ChatMessage(
-          text: replyText,
-          isUser: false,
-        ));
+        _messages.add(_ChatMessage(text: replyText, isUser: false));
       }
     });
   }
@@ -319,8 +357,12 @@ class _AiAssistantViewState extends State<AiAssistantView> {
   }
 
   Future<List<String>> _loadAvailableTopics() async {
-    final classrooms = await AsuraRepository.getAllClassrooms();
+    final allClassrooms = await AsuraRepository.getAllClassrooms();
     final savedRooms = await _loadSavedRooms();
+    final classrooms = await _classroomsAvailableToStudent(
+      allClassrooms,
+      savedRooms,
+    );
     final byRoom = <String, Set<String>>{};
 
     for (final classroom in classrooms) {
@@ -330,7 +372,9 @@ class _AiAssistantViewState extends State<AiAssistantView> {
           ? classroom['name'].toString().trim()
           : 'Classroom';
 
-      final materials = await AsuraRepository.getMaterialsForClassroom(classroomId);
+      final materials = await AsuraRepository.getMaterialsForClassroom(
+        classroomId,
+      );
       for (final material in materials) {
         final name = material['original_name']?.toString().trim();
         if (name != null && name.isNotEmpty) {
@@ -346,7 +390,9 @@ class _AiAssistantViewState extends State<AiAssistantView> {
           ? room['roomName'].toString().trim()
           : 'Joined Room';
 
-      final studentMaterials = await AsuraRepository.getStudentMaterials(hostIp);
+      final studentMaterials = await AsuraRepository.getStudentMaterials(
+        hostIp,
+      );
       for (final studentMaterial in studentMaterials) {
         final name = studentMaterial['original_name']?.toString().trim();
         if (name != null && name.isNotEmpty) {
@@ -356,7 +402,8 @@ class _AiAssistantViewState extends State<AiAssistantView> {
     }
 
     final grouped = <String, List<String>>{
-      for (final entry in byRoom.entries) entry.key: entry.value.toList()..sort(),
+      for (final entry in byRoom.entries)
+        entry.key: entry.value.toList()..sort(),
     };
     if (mounted) {
       setState(() => _topicsByRoom = grouped);
@@ -364,8 +411,32 @@ class _AiAssistantViewState extends State<AiAssistantView> {
       _topicsByRoom = grouped;
     }
 
-    final flat = byRoom.values.expand((names) => names).toSet().toList()..sort();
+    final flat = byRoom.values.expand((names) => names).toSet().toList()
+      ..sort();
     return flat;
+  }
+
+  Future<List<Map<String, dynamic>>> _classroomsAvailableToStudent(
+    List<Map<String, dynamic>> classrooms,
+    List<Map<String, dynamic>> savedRooms,
+  ) async {
+    const storage = FlutterSecureStorage();
+    final role = await storage.read(key: 'ACTIVE_USER_ROLE');
+    if (role != 'student') return classrooms;
+
+    final joinedIds = <String>{};
+    for (final room in savedRooms) {
+      for (final key in ['classroomId', 'remoteId']) {
+        final id = room[key]?.toString().trim() ?? '';
+        if (id.isNotEmpty) joinedIds.add(id);
+      }
+    }
+
+    return classrooms.where((classroom) {
+      final localId = classroom['id']?.toString().trim() ?? '';
+      final remoteId = classroom['remote_id']?.toString().trim() ?? '';
+      return joinedIds.contains(localId) || joinedIds.contains(remoteId);
+    }).toList();
   }
 
   /// Topics grouped into per-room expandable folders so long material lists
@@ -375,8 +446,10 @@ class _AiAssistantViewState extends State<AiAssistantView> {
     required void Function(String topic, bool selected) onToggle,
   }) {
     if (_topicsByRoom.isEmpty) {
-      return Text('No materials found yet.',
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13));
+      return Text(
+        'No materials found yet.',
+        style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+      );
     }
     final roomNames = _topicsByRoom.keys.toList()..sort();
     return Column(
@@ -396,10 +469,18 @@ class _AiAssistantViewState extends State<AiAssistantView> {
             child: ExpansionTile(
               tilePadding: const EdgeInsets.symmetric(horizontal: 12),
               childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-              leading: const Icon(Icons.folder, color: Color(0xFF1E3A8A), size: 20),
-              title: Text(room,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
+              leading: const Icon(
+                Icons.folder,
+                color: Color(0xFF1E3A8A),
+                size: 20,
+              ),
+              title: Text(
+                room,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               subtitle: Text(
                 selectedInRoom > 0
                     ? '${topics.length} material(s) • $selectedInRoom selected'
@@ -411,12 +492,16 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                   spacing: 8,
                   runSpacing: 8,
                   children: topics
-                      .map((topic) => FilterChip(
-                            label: Text(topic,
-                                style: const TextStyle(fontSize: 12)),
-                            selected: selected.contains(topic),
-                            onSelected: (value) => onToggle(topic, value),
-                          ))
+                      .map(
+                        (topic) => FilterChip(
+                          label: Text(
+                            topic,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          selected: selected.contains(topic),
+                          onSelected: (value) => onToggle(topic, value),
+                        ),
+                      )
                       .toList(),
                 ),
               ],
@@ -429,11 +514,14 @@ class _AiAssistantViewState extends State<AiAssistantView> {
 
   Future<void> _launchSummary() async {
     if (_isLoading) return;
-    final hasSelection = _useAllSummaryTopics || _selectedSummaryTopics.isNotEmpty;
+    final hasSelection =
+        _useAllSummaryTopics || _selectedSummaryTopics.isNotEmpty;
     if (!hasSelection) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick at least one material or choose All topics.')),
+        const SnackBar(
+          content: Text('Pick at least one material or choose All topics.'),
+        ),
       );
       return;
     }
@@ -454,20 +542,24 @@ class _AiAssistantViewState extends State<AiAssistantView> {
     if (_isLoading) return;
 
     final customCount = int.tryParse(_questionCountController.text.trim());
-    final requestedCount = customCount != null && customCount > 0 ? customCount : _selectedQuestionCount;
+    final requestedCount = customCount != null && customCount > 0
+        ? customCount
+        : _selectedQuestionCount;
     final clampedCount = requestedCount.clamp(1, 30);
     final hasTopicSelection = _useAllTopics || _selectedTopics.isNotEmpty;
     if (!hasTopicSelection) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick at least one topic or choose All topics.')),
+        const SnackBar(
+          content: Text('Pick at least one topic or choose All topics.'),
+        ),
       );
       return;
     }
 
-    final selectedTopicList = _useAllTopics
-        ? _availableTopics
-        : _selectedTopics.toList()..sort();
+    final selectedTopicList =
+        _useAllTopics ? _availableTopics : _selectedTopics.toList()
+          ..sort();
     final topicSummary = _useAllTopics
         ? 'all topics'
         : selectedTopicList.join(', ');
@@ -544,7 +636,9 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                   Expanded(
                     child: Text(
                       'AI Helper',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   Row(
@@ -552,7 +646,8 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                     children: [
                       Switch.adaptive(
                         value: _allowWebSearch,
-                        onChanged: (value) => setState(() => _allowWebSearch = value),
+                        onChanged: (value) =>
+                            setState(() => _allowWebSearch = value),
                       ),
                       const SizedBox(width: 4),
                       const Text('Broader web search'),
@@ -563,23 +658,32 @@ class _AiAssistantViewState extends State<AiAssistantView> {
             ),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 itemCount: _messages.length,
                 itemBuilder: (context, index) {
                   final message = _messages[index];
                   return Align(
-                    alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                    alignment: message.isUser
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
                     child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       padding: const EdgeInsets.all(12),
                       constraints: const BoxConstraints(maxWidth: 720),
                       decoration: BoxDecoration(
-                        color: message.isUser ? const Color(0xFF1E3A8A) : Colors.grey.shade100,
+                        color: message.isUser
+                            ? const Color(0xFF1E3A8A)
+                            : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
                         message.text,
-                        style: TextStyle(color: message.isUser ? Colors.white : Colors.black87),
+                        style: TextStyle(
+                          color: message.isUser ? Colors.white : Colors.black87,
+                        ),
                       ),
                     ),
                   );
@@ -600,47 +704,59 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                 ),
                 child: SingleChildScrollView(
                   child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Choose quiz scope', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                    const SizedBox(height: 6),
-                    const Text('Select all topics or choose one or more specific topics.'),
-                    const SizedBox(height: 10),
-                    FilterChip(
-                      label: const Text('All topics'),
-                      selected: _useAllTopics,
-                      onSelected: (selected) {
-                        setState(() {
-                          _useAllTopics = selected;
-                          if (selected) {
-                            _selectedTopics.clear();
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _buildRoomTopicFolders(
-                      selected: _selectedTopics,
-                      onToggle: (topic, selected) {
-                        setState(() {
-                          _useAllTopics = false;
-                          if (selected) {
-                            _selectedTopics.add(topic);
-                          } else {
-                            _selectedTopics.remove(topic);
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Question count', style: TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _questionCountPresets
-                          .map((count) => ChoiceChip(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Choose quiz scope',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Select all topics or choose one or more specific topics.',
+                      ),
+                      const SizedBox(height: 10),
+                      FilterChip(
+                        label: const Text('All topics'),
+                        selected: _useAllTopics,
+                        onSelected: (selected) {
+                          setState(() {
+                            _useAllTopics = selected;
+                            if (selected) {
+                              _selectedTopics.clear();
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      _buildRoomTopicFolders(
+                        selected: _selectedTopics,
+                        onToggle: (topic, selected) {
+                          setState(() {
+                            _useAllTopics = false;
+                            if (selected) {
+                              _selectedTopics.add(topic);
+                            } else {
+                              _selectedTopics.remove(topic);
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Question count',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _questionCountPresets
+                            .map(
+                              (count) => ChoiceChip(
                                 label: Text('$count'),
                                 selected: _selectedQuestionCount == count,
                                 onSelected: (_) {
@@ -649,26 +765,27 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                                     _questionCountController.clear();
                                   });
                                 },
-                              ))
-                          .toList(),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _questionCountController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Or enter custom count (1-30)',
-                        border: OutlineInputBorder(),
-                        isDense: true,
+                              ),
+                            )
+                            .toList(),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: _launchMockQuiz,
-                      icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text('Start progressive quiz'),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _questionCountController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Or enter custom count (1-30)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: _launchMockQuiz,
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: const Text('Start progressive quiz'),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -686,46 +803,54 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                 ),
                 child: SingleChildScrollView(
                   child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Choose summary scope', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                    const SizedBox(height: 6),
-                    const Text('Select all materials or choose one or more specific materials.'),
-                    const SizedBox(height: 10),
-                    FilterChip(
-                      label: const Text('All topics'),
-                      selected: _useAllSummaryTopics,
-                      onSelected: (selected) {
-                        setState(() {
-                          _useAllSummaryTopics = selected;
-                          if (selected) {
-                            _selectedSummaryTopics.clear();
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _buildRoomTopicFolders(
-                      selected: _selectedSummaryTopics,
-                      onToggle: (topic, selected) {
-                        setState(() {
-                          _useAllSummaryTopics = false;
-                          if (selected) {
-                            _selectedSummaryTopics.add(topic);
-                          } else {
-                            _selectedSummaryTopics.remove(topic);
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: _launchSummary,
-                      icon: const Icon(Icons.summarize),
-                      label: const Text('Generate summary'),
-                    ),
-                  ],
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Choose summary scope',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Select all materials or choose one or more specific materials.',
+                      ),
+                      const SizedBox(height: 10),
+                      FilterChip(
+                        label: const Text('All topics'),
+                        selected: _useAllSummaryTopics,
+                        onSelected: (selected) {
+                          setState(() {
+                            _useAllSummaryTopics = selected;
+                            if (selected) {
+                              _selectedSummaryTopics.clear();
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      _buildRoomTopicFolders(
+                        selected: _selectedSummaryTopics,
+                        onToggle: (topic, selected) {
+                          setState(() {
+                            _useAllSummaryTopics = false;
+                            if (selected) {
+                              _selectedSummaryTopics.add(topic);
+                            } else {
+                              _selectedSummaryTopics.remove(topic);
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: _launchSummary,
+                        icon: const Icon(Icons.summarize),
+                        label: const Text('Generate summary'),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -741,9 +866,18 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Quiz complete', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    const Text(
+                      'Quiz complete',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    Text('You scored $_score out of ${_quizQuestions.length}.', style: const TextStyle(fontSize: 14)),
+                    Text(
+                      'You scored $_score out of ${_quizQuestions.length}.',
+                      style: const TextStyle(fontSize: 14),
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       'Correct answers: ${_answers.where((answer) => answer).length} • Incorrect answers: ${_answers.where((answer) => !answer).length}',
@@ -803,11 +937,16 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                             Expanded(
                               child: Text(
                                 'Question ${_quizIndex + 1} of ${_quizQuestions.length}',
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFE0F2FE),
                                 borderRadius: BorderRadius.circular(999),
@@ -818,63 +957,84 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _quizQuestions[_quizIndex]['question']?.toString() ?? '',
+                          _quizQuestions[_quizIndex]['question']?.toString() ??
+                              '',
                           style: const TextStyle(fontSize: 15),
                         ),
                         const SizedBox(height: 8),
-                        ...((_quizQuestions[_quizIndex]['options'] as List?) ?? []).map((option) {
-                          final optionText = option.toString();
-                          final isSelected = _selectedOption == optionText;
-                          final correctAnswer =
-                              _quizQuestions[_quizIndex]['correctAnswer']?.toString() ?? '';
-                          final isCorrectOption = optionText == correctAnswer;
+                        ...((_quizQuestions[_quizIndex]['options'] as List?) ??
+                                [])
+                            .map((option) {
+                              final optionText = option.toString();
+                              final isSelected = _selectedOption == optionText;
+                              final correctAnswer =
+                                  _quizQuestions[_quizIndex]['correctAnswer']
+                                      ?.toString() ??
+                                  '';
+                              final isCorrectOption =
+                                  optionText == correctAnswer;
 
-                          // After reveal: correct option green, wrong selection red.
-                          Color? background;
-                          Color border = Colors.grey.shade400;
-                          if (_showAnswer && isCorrectOption) {
-                            background = const Color(0xFFDCFCE7);
-                            border = const Color(0xFF16A34A);
-                          } else if (_showAnswer && isSelected && !isCorrectOption) {
-                            background = const Color(0xFFFEE2E2);
-                            border = const Color(0xFFDC2626);
-                          } else if (isSelected) {
-                            background = const Color(0xFFDBEAFE);
-                            border = const Color(0xFF2563EB);
-                          }
+                              // After reveal: correct option green, wrong selection red.
+                              Color? background;
+                              Color border = Colors.grey.shade400;
+                              if (_showAnswer && isCorrectOption) {
+                                background = const Color(0xFFDCFCE7);
+                                border = const Color(0xFF16A34A);
+                              } else if (_showAnswer &&
+                                  isSelected &&
+                                  !isCorrectOption) {
+                                background = const Color(0xFFFEE2E2);
+                                border = const Color(0xFFDC2626);
+                              } else if (isSelected) {
+                                background = const Color(0xFFDBEAFE);
+                                border = const Color(0xFF2563EB);
+                              }
 
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                backgroundColor: background,
-                                disabledBackgroundColor: background,
-                                side: BorderSide(color: border),
-                              ),
-                              onPressed: _showAnswer ? null : () => _selectOption(optionText),
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(optionText,
-                                          style: TextStyle(
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: background,
+                                    disabledBackgroundColor: background,
+                                    side: BorderSide(color: border),
+                                  ),
+                                  onPressed: _showAnswer
+                                      ? null
+                                      : () => _selectOption(optionText),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            optionText,
+                                            style: TextStyle(
                                               color: _showAnswer
                                                   ? Colors.black87
-                                                  : null)),
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                        if (_showAnswer && isCorrectOption)
+                                          const Icon(
+                                            Icons.check_circle,
+                                            size: 18,
+                                            color: Color(0xFF16A34A),
+                                          ),
+                                        if (_showAnswer &&
+                                            isSelected &&
+                                            !isCorrectOption)
+                                          const Icon(
+                                            Icons.cancel,
+                                            size: 18,
+                                            color: Color(0xFFDC2626),
+                                          ),
+                                      ],
                                     ),
-                                    if (_showAnswer && isCorrectOption)
-                                      const Icon(Icons.check_circle,
-                                          size: 18, color: Color(0xFF16A34A)),
-                                    if (_showAnswer && isSelected && !isCorrectOption)
-                                      const Icon(Icons.cancel,
-                                          size: 18, color: Color(0xFFDC2626)),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            ),
-                          );
-                        }),
+                              );
+                            }),
                         if (_selectedOption != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -882,64 +1042,97 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 if (_showAnswer)
-                                  Builder(builder: (context) {
-                                    final correct = _selectedOption ==
-                                        (_quizQuestions[_quizIndex]['correctAnswer']?.toString() ?? '');
-                                    return Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: correct
-                                            ? const Color(0xFFECFDF3)
-                                            : const Color(0xFFFEF2F2),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
+                                  Builder(
+                                    builder: (context) {
+                                      final correct =
+                                          _selectedOption ==
+                                          (_quizQuestions[_quizIndex]['correctAnswer']
+                                                  ?.toString() ??
+                                              '');
+                                      return Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: correct
+                                              ? const Color(0xFFECFDF3)
+                                              : const Color(0xFFFEF2F2),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                          border: Border.all(
                                             color: correct
                                                 ? const Color(0xFF86EFAC)
-                                                : const Color(0xFFFECACA)),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Icon(
+                                                : const Color(0xFFFECACA),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(
                                                   correct
                                                       ? Icons.check_circle
                                                       : Icons.cancel,
                                                   size: 16,
                                                   color: correct
                                                       ? const Color(0xFF16A34A)
-                                                      : const Color(0xFFDC2626)),
-                                              const SizedBox(width: 6),
-                                              Text(correct ? 'Correct!' : 'Incorrect',
+                                                      : const Color(0xFFDC2626),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  correct
+                                                      ? 'Correct!'
+                                                      : 'Incorrect',
                                                   style: TextStyle(
-                                                      fontWeight: FontWeight.w700,
-                                                      color: correct
-                                                          ? const Color(0xFF166534)
-                                                          : const Color(0xFF991B1B))),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            'Correct answer: ${_quizQuestions[_quizIndex]['correctAnswer']?.toString() ?? ''}',
-                                            style: const TextStyle(fontWeight: FontWeight.w700),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(_quizQuestions[_quizIndex]['hint']?.toString() ?? ''),
-                                          const SizedBox(height: 4),
-                                          Text(_quizQuestions[_quizIndex]['explanation']?.toString() ?? ''),
-                                        ],
-                                      ),
-                                    );
-                                  }),
+                                                    fontWeight: FontWeight.w700,
+                                                    color: correct
+                                                        ? const Color(
+                                                            0xFF166534,
+                                                          )
+                                                        : const Color(
+                                                            0xFF991B1B,
+                                                          ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Correct answer: ${_quizQuestions[_quizIndex]['correctAnswer']?.toString() ?? ''}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _quizQuestions[_quizIndex]['hint']
+                                                      ?.toString() ??
+                                                  '',
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _quizQuestions[_quizIndex]['explanation']
+                                                      ?.toString() ??
+                                                  '',
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 const SizedBox(height: 8),
                                 Row(
                                   children: [
                                     FilledButton(
                                       onPressed: _showAnswer
                                           ? _goToNextQuestion
-                                          : (_selectedOption == null ? null : _revealAnswer),
-                                      child: Text(_showAnswer ? 'Next' : 'Answer'),
+                                          : (_selectedOption == null
+                                                ? null
+                                                : _revealAnswer),
+                                      child: Text(
+                                        _showAnswer ? 'Next' : 'Answer',
+                                      ),
                                     ),
                                     const SizedBox(width: 8),
                                     if (_showAnswer)
@@ -972,7 +1165,8 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                       minLines: 1,
                       maxLines: 4,
                       decoration: const InputDecoration(
-                        hintText: 'Ask about the topic or materials in your joined rooms',
+                        hintText:
+                            'Ask about the topic or materials in your joined rooms',
                         border: OutlineInputBorder(),
                       ),
                       onSubmitted: (_) => _sendMessage(),
